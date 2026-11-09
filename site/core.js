@@ -11,8 +11,8 @@ export const nutrients = {
 
 export const nutrientKeys = Object.keys(nutrients);
 export const targetKeys = ['kcal', 'protein', 'fiber', 'sodium', 'saturatedFat', 'addedSugar',
-  'calcium', 'iron', 'potassium', 'vitaminC', 'vitaminB12', 'folate', 'magnesium', 'zinc', 'vitaminD'];
-export const upperTargets = ['sodium', 'saturatedFat', 'addedSugar'];
+  'calcium', 'iron', 'potassium', 'vitaminC', 'vitaminB12', 'folate', 'magnesium', 'zinc', 'vitaminD', 'fat'];
+export const upperTargets = ['fat', 'saturatedFat', 'sodium', 'addedSugar'];
 export const weightGoals = { maintain: 'Maintain weight', gain: 'Gain weight', lose: 'Lose weight' };
 export const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 export const diets = ['any', 'vegetarian', 'vegan'];
@@ -52,6 +52,18 @@ export function parseQuantity(input) {
 export function scaleNutrition(values, factor) {
   return Object.fromEntries(nutrientKeys.flatMap(key =>
     Number.isFinite(values[key]) ? [[key, values[key] * factor]] : []));
+}
+
+export function scaleMealEntries(entries, multiplier) {
+  if (!positive(multiplier)) throw new Error('Enter a positive meal amount.');
+  return entries.map(entry => {
+    const quantity = entry.quantity * multiplier;
+    const nutrients = scaleNutrition(entry.nutrients, multiplier);
+    if (!positive(quantity) || !positive(quantity * entry.factor) || !nutrition(nutrients)) {
+      throw new Error('This meal amount is outside the supported range.');
+    }
+    return { ...entry, quantity, nutrients };
+  });
 }
 
 export function summarize(entries) {

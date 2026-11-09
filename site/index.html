@@ -26,8 +26,11 @@
         <div class="date-control"><button id="previous" class="quiet" type="button" aria-label="Previous day">‹</button><input id="day" type="date" aria-label="Diary date"><button id="next" class="quiet" type="button" aria-label="Next day">›</button><button id="today" class="quiet" type="button">Today</button></div>
       </div>
       <div id="summary" class="summary" aria-label="Daily nutrition"></div>
+      <div id="day-targets" class="daily-targets" aria-label="Daily nutrient targets" hidden></div>
+      <p class="muted target-legend" id="day-target-legend" hidden></p>
       <details class="panel compact" id="details"><summary>More nutrients</summary><div id="extra-nutrients" class="details-grid"></div></details>
       <div class="section-head"><div><h2>Meals</h2><p>Search the catalog or repeat a meal you know.</p></div><label class="check"><input id="complete" type="checkbox"> Day complete</label></div>
+      <p id="portion-share-legend" class="muted target-legend" hidden></p>
       <div id="meals" class="meals"></div>
     </section>
     <section id="nutrition" hidden>
@@ -67,7 +70,7 @@
           <div class="fields"><label>Calories (kcal)<input name="kcal" type="number" min="1" max="20000" step="any" placeholder="Optional"></label><label>Protein (g)<input name="protein" type="number" min="1" max="1000" step="any" placeholder="Optional"></label></div>
           <div class="fields" id="primary-nutrient-targets"></div>
           <details><summary>More nutrient targets</summary><div class="fields target-fields" id="extra-nutrient-targets"></div></details>
-          <label class="check"><input name="showReferences" type="checkbox" checked> Show WHO adult reference values</label>
+          <label class="check"><input name="showReferences" type="checkbox" checked> Show general adult reference values</label>
           <label>Food preference<select name="diet"><option value="any">No preference</option><option value="vegetarian">Vegetarian</option><option value="vegan">Vegan</option></select></label>
           <button type="submit">Save targets</button>
         </form>

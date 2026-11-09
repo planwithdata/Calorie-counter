@@ -4,7 +4,7 @@ import test from 'node:test';
 import { backupVersion, emptyState, makeEntry, validateBackup } from '../site/core.js';
 import {
   compareMeal, dayReferenceStatus, foodContributions, mealSuggestions, nutritionReport,
-  reportReference, summaryText, targetPatterns, trendReferenceStatus,
+  portionLimitShare, reportReference, summaryText, targetPatterns, trendReferenceStatus,
 } from '../site/insights.js';
 
 const foods = JSON.parse(readFileSync(new URL('../site/catalog.json', import.meta.url), 'utf8'));
@@ -110,4 +110,24 @@ test('report colors use adult or personal references and avoid judging an incomp
   assert.equal(reportReference(settings, 'potassium'), null);
   settings.nutrientTargets = { potassium: 3000 };
   assert.equal(reportReference(settings, 'potassium').label, 'Your target');
+});
+
+test('portion colors use the actual portion, the selected limit and inclusive 5% and 20% bands', () => {
+  const settings = emptyState().settings;
+  assert.equal(portionLimitShare(settings, 'fat', 0).tone, 'met');
+  assert.equal(portionLimitShare(settings, 'saturatedFat', 1).tone, 'met');
+  assert.equal(portionLimitShare(settings, 'saturatedFat', 1.01).tone, 'moderate');
+  assert.equal(portionLimitShare(settings, 'saturatedFat', 4).tone, 'over');
+  assert.equal(portionLimitShare(settings, 'fat', 16).reference.value, 78);
+  assert.equal(portionLimitShare(settings, 'fat', undefined), null);
+  assert.equal(portionLimitShare(settings, 'potassium', 5000), null);
+  settings.showReferences = false;
+  assert.equal(portionLimitShare(settings, 'fat', 16), null);
+  settings.nutrientTargets = { fat: 50 };
+  assert.equal(portionLimitShare(settings, 'fat', 10).percent, 20);
+  assert.equal(portionLimitShare(settings, 'fat', 10).tone, 'over');
+  settings.kcal = 2000;
+  const calorieReference = reportReference(settings, 'kcal');
+  assert.equal(dayReferenceStatus({ value: 2101, known: 1, total: 1 }, false, calorieReference).tone, 'over');
+  assert.equal(dayReferenceStatus({ value: 1900, known: 1, total: 1 }, true, calorieReference).tone, 'met');
 });

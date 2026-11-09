@@ -1,10 +1,10 @@
 import {
   backupVersion, calculateRecipe, diaryCsv, findFoods, makeEntry, meals, nutrients, nutrientKeys,
-  parseQuantity, prettyDay, shiftDay, summarize, targetKeys, today, upperTargets, validateBackup, validateCatalog, weeklyReview,
+  parseQuantity, prettyDay, scaleMealEntries, shiftDay, summarize, targetKeys, today, upperTargets, validateBackup, validateCatalog, weeklyReview,
 } from './core.js';
 import {
   adultReferences, compareMeal, dayReferenceStatus, foodContributions, mealGroups, mealSuggestions,
-  nutritionReport, reportReference, summaryText, targetFor, trendReferenceStatus,
+  nutritionReport, portionLimitShare, reportReference, summaryText, targetFor, trendReferenceStatus,
 } from './insights.js';
 import { loadDiary, openDiary, updateDiary } from './storage.js';
 
@@ -101,18 +101,37 @@ function foodRow(food, action, label) {
 
 function renderDiary() {
   $('day').value = day;
-  $('complete').checked = state.completed[day] === true;
+  const complete = state.completed[day] === true;
+  $('complete').checked = complete;
   const entries = state.entries.filter(entry => entry.day === day);
   const total = summarize(entries);
   const display = key => entries.length ? nutrient(key, total[key].value) : '—';
   const coverage = key => total[key].known > 0 && total[key].known < total[key].total
     ? `Partial · ${total[key].known}/${total[key].total} items` : '';
+  const references = new Map(targetKeys.map(key => [key, reportReference(state.settings, key)]));
   $('summary').replaceChildren(...primary.map(key => {
-    const target = targetFor(state.settings, key);
+    const reference = references.get(key);
+    const status = entries.length ? dayReferenceStatus(total[key], complete, reference) : null;
     return element('div', { className: 'stat' }, element('span', { textContent: nutrients[key][0] }),
-      element('strong', { textContent: display(key) }),
-      element('small', { textContent: coverage(key) || (target ? `Goal ${nutrient(key, target)}` : '') }));
+      referenceValue(display(key), status, 'strong'),
+      element('small', { textContent: coverage(key) || (reference ? referenceText(key, reference) : '') }),
+      ...(status ? [statusBadge(status)] : []));
   }));
+  const cards = targetKeys.filter(key => entries.length && !primary.includes(key) && references.get(key));
+  $('day-targets').replaceChildren(...cards.map(key => {
+    const reference = references.get(key);
+    const status = dayReferenceStatus(total[key], complete, reference);
+    return element('div', { className: 'panel target-card' }, element('span', { className: 'muted', textContent: nutrients[key][0] }),
+      referenceValue(shownTotal(key, total[key]), status, 'strong'),
+      element('small', { className: 'muted', textContent: `${referenceText(key, reference)} · ${reference.label}` }),
+      statusBadge(status));
+  }));
+  $('day-targets').hidden = cards.length === 0;
+  $('day-target-legend').hidden = !entries.length || ![...references.values()].some(Boolean);
+  $('day-target-legend').textContent = 'Green meets the target. Amber is below it. Red flags an upper limit or an above-target total. Gray means the day or nutrient data is incomplete.';
+  const portionLegend = $('portion-share-legend');
+  portionLegend.hidden = !entries.some(entry => upperTargets.some(key => portionLimitShare(state.settings, key, entry.nutrients[key])));
+  portionLegend.textContent = 'Each food shows its share of a daily limit: low ≤5%, moderate between 5% and 20%, high ≥20%.';
   $('extra-nutrients').replaceChildren(nutrientGrid(nutrientKeys.slice(5), key => [display(key), coverage(key)].filter(Boolean).join(' · ')));
   $('meals').replaceChildren(...meals.map(meal => {
     const list = entries.filter(entry => entry.meal === meal);
@@ -122,7 +141,8 @@ function renderDiary() {
       button('+ Add food', () => addFood(meal), ''));
     const rows = list.map(entry => element('div', { className: 'entry' },
       element('div', { className: 'row-main' }, element('strong', { textContent: entry.name }),
-        element('small', { textContent: `${size(entry.quantity, entry.unit)} · ${nutrient('kcal', entry.nutrients.kcal)}` })),
+        element('small', { textContent: `${size(entry.quantity, entry.unit)} · ${nutrient('kcal', entry.nutrients.kcal)}` }),
+        portionLimitBadges(entry.nutrients)),
       button('Edit', () => editEntry(entry))));
     const footer = element('div', { className: 'actions' });
     if (list.length) footer.append(button('Save this meal', () => saveMeal(meal, list)),
@@ -182,17 +202,42 @@ function statusBadge(status) {
   return container;
 }
 
+function portionLimitBadges(values) {
+  const badges = upperTargets.flatMap(key => {
+    const share = portionLimitShare(state.settings, key, values[key]);
+    if (!share) return [];
+    const percent = share.percent;
+    const rounded = Math.round(percent * 10) / 10;
+    const display = percent > 5 && rounded === 5 ? '>5%' : percent < 20 && rounded === 20 ? '<20%'
+      : percent > 0 && rounded === 0 ? '<0.1%' : `${format(rounded)}%`;
+    return [element('span', { className: `report-status ${share.tone}`,
+      textContent: `${nutrients[key][0]} ${display} · ${share.text}`,
+      title: `${nutrient(key, values[key])} of ${nutrient(key, share.reference.value)} · ${share.reference.label}` })];
+  });
+  return element('div', { className: 'portion-badges', hidden: !badges.length }, ...badges);
+}
+
+function referenceText(key, reference) {
+  const prefix = { minimum: '≥ ', maximum: '≤ ', under: '< ', target: '' };
+  return `${prefix[reference.type]}${nutrient(key, reference.value)}`;
+}
+
+function referenceValue(value, status, tag = 'span') {
+  return element(tag, { className: status ? `reference-value ${status.tone}` : '', textContent: value });
+}
+
 function referenceCell(key, reference, status) {
   if (!reference) return '—';
-  const prefix = { minimum: '≥ ', maximum: '≤ ', under: '< ', target: '' };
-  return element('div', {}, `${prefix[reference.type]}${nutrient(key, reference.value)}`,
+  return element('div', {}, referenceText(key, reference),
     element('small', { className: 'muted report-detail', textContent: reference.label }), statusBadge(status));
 }
 
 function referenceNote() {
-  return element('p', { className: 'muted footnote' }, 'Colors compare logged intake with a daily target. Green means the reference was met. Calorie totals within 5% of your target are marked near target. ',
+  return element('p', { className: 'muted footnote' }, 'Colors compare logged intake with a daily target. Green meets the reference, amber is below target, and red is above a target or limit. Calorie totals within 5% of your target are marked near target. ',
     element('a', { href: 'https://www.who.int/news-room/fact-sheets/detail/healthy-diet', target: '_blank', rel: 'noopener noreferrer', textContent: 'WHO adult references' }),
-    ' cover fiber, sodium and potassium. Potassium from meals is an intake estimate. People with kidney disease or medicines that affect potassium may need a different target. ',
+    ' cover fiber, sodium and potassium. ',
+    element('a', { href: 'https://www.fda.gov/food/nutrition-facts-label/daily-value-nutrition-and-supplement-facts-labels', target: '_blank', rel: 'noopener noreferrer', textContent: 'FDA label references' }),
+    ' cover fat, saturated fat and added sugar and provide the portion share bands. Potassium from meals is an intake estimate. People with kidney disease or medicines that affect potassium may need a different target. ',
     element('a', { href: 'https://ods.od.nih.gov/factsheets/potassium-Consumer/', target: '_blank', rel: 'noopener noreferrer', textContent: 'NIH potassium guidance' }));
 }
 
@@ -222,7 +267,8 @@ function renderNutrition() {
       $('focus-nutrient').focus();
     }, 'metric-select');
     label.setAttribute('aria-pressed', String(focus === key));
-    return [label, period === 1 ? shownTotal(key, total) : (average == null ? '—' : nutrient(key, average)),
+    const value = period === 1 ? shownTotal(key, total) : (average == null ? '—' : nutrient(key, average));
+    return [label, referenceValue(value, status),
       referenceCell(key, reference, status), coverage];
   };
   const headers = ['Nutrient', period === 1 ? 'Logged' : 'Average', 'Daily reference', 'Coverage'];
@@ -446,8 +492,9 @@ function renderReview() {
     const reference = reportReference(state.settings, key);
     if (!reference) return [];
     const metric = nutrientReport.metrics[key];
-    return [[nutrients[key][0], metric.average == null ? '—' : nutrient(key, metric.average),
-      referenceCell(key, reference, trendReferenceStatus(metric, key, reference))]];
+    const status = trendReferenceStatus(metric, key, reference);
+    return [[nutrients[key][0], referenceValue(metric.average == null ? '—' : nutrient(key, metric.average), status),
+      referenceCell(key, reference, status)]];
   });
   if (highlights.length) {
     const sodium = trendReferenceStatus(nutrientReport.metrics.sodium, 'sodium', reportReference(state.settings, 'sodium'));
@@ -549,6 +596,7 @@ function portionForm({ food, meal, oldEntry }) {
   const mealSelect = element('select', {}, ...meals.map(value => element('option', { value, textContent: value })));
   mealSelect.value = meal;
   const preview = element('div', { className: 'portion-preview', ariaLive: 'polite' });
+  const shares = element('div');
   const form = element('form', { className: 'stack' });
   const error = element('p', { className: 'form-error', role: 'alert' });
   const details = element('details', {}, element('summary', { textContent: 'All nutrients for this portion' }));
@@ -562,6 +610,8 @@ function portionForm({ food, meal, oldEntry }) {
   const update = () => {
     const result = calculate();
     preview.textContent = result ? `${size(result.quantity * result.factor, result.basis)} · ${nutrient('kcal', result.nutrients.kcal)} · ${nutrient('protein', result.nutrients.protein)} protein` : 'Enter a positive amount, such as 1.5 or 1/2.';
+    shares.replaceChildren(...(result ? [portionLimitBadges(result.nutrients)] : []));
+    shares.hidden = !shares.querySelector('.report-status');
     details.querySelector('.details-grid')?.remove();
     if (result) details.append(nutrientGrid(nutrientKeys, key => nutrient(key, result.nutrients[key])));
   };
@@ -578,7 +628,7 @@ function portionForm({ food, meal, oldEntry }) {
   else actions.append(button('Back to search', () => addFood(meal)));
   form.append(sourceInfo(food.source), element('div', { className: 'fields' },
     element('label', {}, 'Quantity', amount), element('label', {}, 'Unit', unit)),
-  element('label', {}, 'Meal', mealSelect), preview, details, error, actions);
+  element('label', {}, 'Meal', mealSelect), preview, shares, details, error, actions);
   form.onsubmit = async event => {
     event.preventDefault();
     const result = calculate();
@@ -757,19 +807,65 @@ function saveMeal(meal, entries) {
 }
 
 function repeatMeal(meal) {
-  const list = element('div', { className: 'stack' }, element('p', { className: 'muted', textContent: `Add all portions to ${meal.toLowerCase()} on ${prettyDay(day)}.` }));
   const selectedDay = day;
-  for (const item of state.savedMeals) {
-    list.append(element('div', { className: 'food-row' }, element('strong', { className: 'row-main', textContent: item.name }),
-      button('Add meal', () => save(draft => {
-        const current = draft.savedMeals.find(candidate => candidate.id === item.id);
-        if (!current) throw new Error('This saved meal was removed in another tab.');
-        const createdAt = new Date().toISOString();
-        draft.entries.push(...current.entries.map(entry => ({ ...entry, id: crypto.randomUUID(), day: selectedDay, meal, createdAt })));
-        delete draft.completed[selectedDay];
-      }, `Added ${item.name} to ${meal.toLowerCase()}.`, () => dialog.close()), '')));
+  const savedMeals = state.savedMeals;
+  const selection = element('select', {}, ...savedMeals.map(item => option(item.id, item.name)));
+  const amount = element('select', {}, option('0.5', '½× · Half'), option('1', '1× · As saved'),
+    option('1.5', '1½×'), option('2', '2× · Double'), option('custom', 'Custom'));
+  amount.value = '1';
+  const custom = element('input', { placeholder: 'e.g. 3/4 or 1.25', autoComplete: 'off' });
+  const customLabel = element('label', { hidden: true }, 'Custom multiplier', custom);
+  const preview = element('div', { className: 'portion-preview stack' });
+  const error = element('p', { className: 'form-error', role: 'alert' });
+  const submit = element('button', { type: 'submit', textContent: 'Add meal' });
+  const form = element('form', { className: 'stack' },
+    element('p', { className: 'muted', textContent: `Add to ${meal.toLowerCase()} on ${prettyDay(selectedDay)}. The same multiplier applies to every food.` }),
+    element('label', {}, 'Saved meal', selection), element('label', {}, 'Meal amount', amount), customLabel, preview, error, submit);
+  const multiplier = () => parseQuantity(amount.value === 'custom' ? custom.value : amount.value);
+
+  function update() {
+    error.textContent = '';
+    customLabel.hidden = amount.value !== 'custom';
+    try {
+      const item = savedMeals.find(candidate => candidate.id === selection.value);
+      const entries = scaleMealEntries(item.entries, multiplier());
+      const total = summarize(entries);
+      preview.replaceChildren(
+        element('strong', { ariaLive: 'polite', textContent: `${shownTotal('kcal', total.kcal)} · Protein ${shownTotal('protein', total.protein)}` }),
+        element('ul', { className: 'meal-portion-list' }, ...entries.map(entry => element('li', {},
+          `${entry.name} · ${size(entry.quantity * entry.factor, entry.basis)}`))));
+      submit.disabled = false;
+    } catch (failure) {
+      preview.replaceChildren(element('p', { className: 'muted', textContent: failure.message }));
+      submit.disabled = true;
+    }
   }
-  showDialog('Repeat a saved meal', list);
+
+  selection.onchange = update;
+  amount.onchange = () => {
+    update();
+    if (amount.value === 'custom') custom.focus();
+  };
+  custom.oninput = update;
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    const selectedId = selection.value;
+    const ratio = multiplier();
+    submit.disabled = selection.disabled = amount.disabled = custom.disabled = true;
+    const success = await save(draft => {
+      const current = draft.savedMeals.find(candidate => candidate.id === selectedId);
+      if (!current) throw new Error('This saved meal was removed in another tab.');
+      const createdAt = new Date().toISOString();
+      for (const entry of scaleMealEntries(current.entries, ratio)) {
+        draft.entries.push({ ...entry, id: crypto.randomUUID(), day: selectedDay, meal, createdAt });
+      }
+      delete draft.completed[selectedDay];
+    }, `Added ${format(ratio)}× the saved meal to ${meal.toLowerCase()}.`, () => dialog.close());
+    if (!success) submit.disabled = selection.disabled = amount.disabled = custom.disabled = false;
+  };
+  showDialog('Repeat a saved meal', form);
+  update();
 }
 
 function confirmAction(title, description, label, action) {
@@ -816,8 +912,9 @@ function bind() {
       name: key, type: 'number', min: '0.001', max: '100000', step: 'any', placeholder: 'Optional',
     }));
   };
-  $('primary-nutrient-targets').append(...['fiber', 'sodium'].map(targetField));
-  $('extra-nutrient-targets').append(...targetKeys.slice(4).map(targetField));
+  const commonTargets = ['fiber', 'sodium', 'fat', 'saturatedFat'];
+  $('primary-nutrient-targets').append(...commonTargets.map(targetField));
+  $('extra-nutrient-targets').append(...targetKeys.slice(2).filter(key => !commonTargets.includes(key)).map(targetField));
   $('nutrition-period').onchange = renderNutrition;
   $('focus-nutrient').onchange = renderNutrition;
   $('nutrition-date').onchange = event => {

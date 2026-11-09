@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   backupVersion, calculateRecipe, diaryCsv, emptyState, findFoods, makeEntry, parseQuantity,
-  summarize, validateBackup, validateCatalog, weeklyReview,
+  scaleMealEntries, summarize, validateBackup, validateCatalog, weeklyReview,
 } from '../site/core.js';
 
 const foods = validateCatalog(JSON.parse(readFileSync(new URL('../site/catalog.json', import.meta.url), 'utf8')));
@@ -28,6 +28,17 @@ test('finds everyday Indian foods, supplements, and clearly sourced delivery pro
   for (const food of foods) for (const item of food.recipe || []) assert.ok(catalog.has(item.id), item.id);
 });
 
+test('finds North Indian preparations by common names and spellings', () => {
+  for (const query of ['shahi paneer', 'palak paneer', 'aloo sabzi', 'chola bhatura',
+    'bhatura', 'tinda', 'tori', 'karela', 'methi aloo', 'kaddu', 'bhindi', 'lauki', 'gajar matar']) {
+    assert.ok(findFoods(foods, query).some(food => food.portions?.length && food.source.url), query);
+  }
+  const dish = catalog.get('chole-bhatura');
+  assert.equal(dish.portions[0].amount, 225);
+  const combined = entry(dish.id, 1, 'plate', dish.portions[0].amount);
+  approximate(combined.nutrients.kcal, 480.6, 0.1);
+});
+
 test('accepts familiar portions and rejects invalid quantities', () => {
   for (const [quantity, expected] of [['1 1/2', 1.5], ['½', 0.5], ['2¾', 2.75], ['0.25', 0.25], ['.5', 0.5]]) {
     assert.equal(parseQuantity(quantity), expected);
@@ -35,6 +46,20 @@ test('accepts familiar portions and rejects invalid quantities', () => {
   for (const quantity of ['', '-1', '0', 'Infinity', '1/0', '1.5.2', '2 rotis', '1e5']) {
     assert.equal(parseQuantity(quantity), null, quantity);
   }
+});
+
+test('repeating a saved meal scales mixed portions and known nutrients using the same ratio', () => {
+  const originals = [entry('roti', 2, 'piece', 40), entry('amul-gold-pouch', 1, 'glass', 200)];
+  const snapshot = structuredClone(originals);
+  const half = scaleMealEntries(originals, 0.5);
+  assert.deepEqual(half.map(food => [food.quantity, food.unit, food.factor]), [[1, 'piece', 40], [0.5, 'glass', 200]]);
+  assert.equal(summarize(half).kcal.value, 189);
+  assert.equal(half[1].nutrients.fiber, undefined);
+  assert.equal(summarize(scaleMealEntries(originals, 2)).kcal.value, 756);
+  assert.equal(summarize(scaleMealEntries(originals, parseQuantity('3/4'))).kcal.value, 283.5);
+  assert.deepEqual(originals, snapshot);
+  assert.throws(() => scaleMealEntries(originals, 0), /positive meal amount/);
+  assert.throws(() => scaleMealEntries(originals, 1e7), /outside the supported range/);
 });
 
 test('scales the discussed meals using saved portion weights', () => {

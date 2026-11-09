@@ -18,6 +18,8 @@ With Node.js 22, run `npm start` and open `http://127.0.0.1:4173/Calorie-counter
 
 Diary entries, preferences and personal foods live in IndexedDB. Export a JSON backup from Settings before moving to a different browser or device. Restore previews the record counts and replaces the local diary only after confirmation. CSV is for analysis.
 
+Use **Repeat saved meal** to preview half, double, or a custom multiple such as `3/4`. The same multiplier scales every food’s saved amount and known nutrients.
+
 Enable **Settings → Pages → Build and deployment → GitHub Actions** in the GitHub repository. The included workflow runs the tests and publishes only `site/` on pushes to `main`. It can also be run manually.
 
 The service worker caches the complete app shell and catalog after the first successful load. The workflow gives each deployed revision its own cache. Close the app's open tabs to let the browser activate a waiting update. The diary survives updates on the same browser and site origin.
@@ -27,5 +29,7 @@ The service worker caches the complete app shell and catalog after the first suc
 Open **Nutrition** for daily meal breakdowns, food contributors, and 7- or 30-day trends. Averages include only complete days with a recorded value on every food for the nutrient being averaged. Earlier diary entries retain their saved nutrient values.
 
 Daily and weekly reports compare logged intake with personal targets and optional [WHO adult references](https://www.who.int/news-room/fact-sheets/detail/healthy-diet) for fiber, sodium, and potassium. Color is paired with a text status. Weekly reference comparisons use at least three fully covered days. Potassium highlights compare dietary intake with a reference.
+
+Portion badges show each food’s share of daily limits for fat, saturated fat, sodium, and added sugar when data is available. They use the portion you logged and your chosen limits, with general reference values as a fallback. Green means a low share (up to 5%), amber a moderate share, and red a high share (20% or more). [FDA label references](https://www.fda.gov/food/nutrition-facts-label/daily-value-nutrition-and-supplement-facts-labels)
 
 Set your own targets in **Settings**. In **Nutrition**, choose a meal to compare adding, reducing, or swapping a food. Previews calculate meal and day totals without editing the diary. Suggested changes use repeated patterns on fully covered days and respect your selected dietary preference. In **Weekly review**, preview and copy a summary you can share manually.

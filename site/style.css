@@ -104,9 +104,26 @@ dialog::backdrop { background: #142f26a0; }
 .summary-text { width: 100%; min-height: 14rem; resize: vertical; color: var(--ink); background: white; border: 1px solid #acbaac; border-radius: 9px; padding: .6rem; font: inherit; }
 .report-status { display: inline-block; border-radius: 7px; background: #ecefea; color: #425348; padding: .18rem .38rem; font-size: .74rem; font-weight: 650; }
 .report-status.met { background: #e0f0dd; color: #245232; }
-.report-status.below { background: #f9ebcc; color: #724c0a; }
+.report-status:is(.below,.moderate) { background: #f9ebcc; color: #724c0a; }
 .report-status.over { background: #f9e1dc; color: #812f28; }
 .report-detail { display: block; margin-top: .15rem; }
+.reference-value.met { color: #245232; }
+.reference-value.below { color: #724c0a; }
+.reference-value.over { color: #812f28; }
+.stat:first-child .reference-value.met { color: #bdebb5; }
+.stat:first-child .reference-value.below { color: #ffe09a; }
+.stat:first-child .reference-value.over { color: #ffc1ba; }
+.stat .report-status { max-width: 100%; overflow-wrap: anywhere; }
+.stat:first-child .report-status { color: #425348; }
+.stat:first-child .report-status.met { color: #245232; }
+.stat:first-child .report-status.below { color: #724c0a; }
+.stat:first-child .report-status.over { color: #812f28; }
+.daily-targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(135px, 100%), 1fr)); gap: .5rem; margin-top: .6rem; }
+.target-card { padding: .7rem; }
+.target-card :is(strong,small) { display: block; }
+.target-legend { margin: .55rem 0; }
+.portion-badges { display: flex; flex-wrap: wrap; gap: .28rem; margin-top: .28rem; }
+.meal-portion-list { margin: 0; padding-inline-start: 1.25rem; }
 #nutrition .actions { align-items: end; }
 @media (max-width: 650px) {
   .shell { width: calc(100% - 1.2rem); }

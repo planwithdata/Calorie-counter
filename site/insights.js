@@ -8,6 +8,9 @@ export const adultReferences = {
   fiber: { value: 25, type: 'minimum' },
   sodium: { value: 2000, type: 'under' },
   potassium: { value: 3510, type: 'minimum' },
+  fat: { value: 78, type: 'maximum', label: 'FDA label reference' },
+  saturatedFat: { value: 20, type: 'maximum', label: 'FDA label reference' },
+  addedSugar: { value: 50, type: 'maximum', label: 'FDA label reference' },
 };
 
 export function reportReference(settings, key) {
@@ -15,7 +18,17 @@ export function reportReference(settings, key) {
   if (personal) return { value: personal, type: key === 'kcal' ? 'target'
     : upperTargets.includes(key) ? 'maximum' : 'minimum', label: 'Your target' };
   if (settings.showReferences === false || !Object.hasOwn(adultReferences, key)) return null;
-  return { ...adultReferences[key], label: 'WHO adult reference' };
+  return { label: 'WHO adult reference', ...adultReferences[key] };
+}
+
+export function portionLimitShare(settings, key, value) {
+  if (!upperTargets.includes(key) || !Number.isFinite(value)) return null;
+  const reference = reportReference(settings, key);
+  if (!reference) return null;
+  const percent = (value / reference.value) * 100;
+  const status = percent <= 5 ? { tone: 'met', text: 'Low' }
+    : percent < 20 ? { tone: 'moderate', text: 'Moderate' } : { tone: 'over', text: 'High' };
+  return { percent, reference, ...status };
 }
 
 function compareReference(value, { value: target, type }) {
@@ -23,7 +36,7 @@ function compareReference(value, { value: target, type }) {
     return { tone: 'over', text: 'At or over limit' };
   }
   if (type === 'target' && Math.abs(value - target) > target * 0.05) {
-    return { tone: 'below', text: value < target ? 'Below target' : 'Above target' };
+    return value < target ? { tone: 'below', text: 'Below target' } : { tone: 'over', text: 'Above target' };
   }
   if (type === 'minimum' && value < target) return { tone: 'below', text: 'Below target' };
   if (type === 'target') return { tone: 'met', text: 'Near target' };
@@ -34,8 +47,8 @@ export function dayReferenceStatus(total, complete, reference) {
   if (!reference) return null;
   if (total.value == null) return { tone: 'neutral', text: 'No data' };
   if (!complete || total.known !== total.total) {
-    if (['under', 'maximum'].includes(reference.type) && compareReference(total.value, reference).tone === 'over') {
-      return { tone: 'over', text: 'Recorded amount reaches limit' };
+    if (compareReference(total.value, reference).tone === 'over') {
+      return { tone: 'over', text: reference.type === 'target' ? 'Recorded amount above target' : 'Recorded amount reaches limit' };
     }
     return { tone: 'neutral', text: total.known !== total.total ? 'Partial data' : 'Day open' };
   }

@@ -5,7 +5,9 @@ https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-0
 https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_csv_2024-10-31.zip
 
 USDA nutrition data are public domain (CC0): https://fdc.nal.usda.gov/api-guide/#licensing
-Manufacturer records use cited Indian product-label values.
+Manufacturer records use cited Indian product-label values. Selected CoFID values are
+transcribed from Public Health England’s Composition of Foods Integrated Dataset 2021
+under the Open Government Licence v3.0: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
 """
 
 import argparse
@@ -355,7 +357,8 @@ sr = """168893|atta|Whole-wheat flour|Grains & breads|atta;gehun ka atta
 170686|buckwheat-cooked|Buckwheat groats, cooked|Grains & breads|kuttu groats
 169758|parboiled-rice-dry|Parboiled rice, dry|Grains & breads|usna chawal
 174271|soybeans-cooked|Soybeans, plain boiled|Pulses & beans|soya beans cooked;soyabean
-171325|garlic-powder|Garlic powder|Oils & seasonings|lahsun powder"""
+171325|garlic-powder|Garlic powder|Oils & seasonings|lahsun powder
+175040|baking-soda|Baking soda|Oils & seasonings|sodium bicarbonate;meetha soda"""
 
 fndds = """2705740|paneer|Paneer|Dairy & alternatives|paneer;panir
 2706490|biryani-meat|Meat biryani, survey reference|Indian dishes|biryani;mutton biryani
@@ -415,6 +418,7 @@ with_portions = {
  'salt': [('tsp (6 g, estimate)',6)], 'sugar': [('tsp (4 g, estimate)',4)],
  'soya-chunks-dry': [('dry portion (25 g)',25)],
  'dal-reference': [('katori (150 g, estimate)',150)], 'sabzi-reference': [('katori (125 g, estimate)',125)],
+ 'palak-paneer': [('katori (150 g, estimate)',150)],
 }
 notes = {
  'rice-cooked':'Unenriched long-grain white rice, cooked without salt. A generic proxy for plain basmati. Cooked weight changes with water.',
@@ -516,7 +520,7 @@ data['egg-boiled']['portions'].insert(0,dict(label='large egg (50 g, edible)',am
 data['roti-reference'].setdefault('portions',[]).append(dict(label='medium roti (40 g, estimate)',amount=40))
 data['paneer'].setdefault('portions',[]).append(dict(label='50 g portion',amount=50))
 
-def add_recipe(ident, name, aliases, category, basis, yield_amount, ingredients, portions, detail, *, added_sugar=None):
+def add_recipe(ident, name, aliases, category, basis, yield_amount, ingredients, portions, detail, *, added_sugar=None, reference=None):
     assert yield_amount > 0 and all(key in data and amount > 0 for key,amount in ingredients)
     if ident in data:
         raise ValueError(f'Duplicate recipe {ident}')
@@ -534,6 +538,9 @@ def add_recipe(ident, name, aliases, category, basis, yield_amount, ingredients,
     ) else 'Modeled home recipe · USDA and package values')
     source = dict(label=label, url='https://fdc.nal.usda.gov/download-datasets/',
                   note=f'{detail} Modeled batch: {assumption}. Finished yield: {yield_amount:g} {basis}.')
+    if reference:
+        source['url'] = reference
+        source['note'] += ' Linked recipe gives preparation context. The app estimate uses the listed batch and USDA ingredient values.'
     if label.endswith('package values'):
         source['note'] += ' Package values are cited on the individual ingredient entries.'
     data[ident] = dict(id=ident,name=name,aliases=aliases.split(';'),category=category,basis=basis,nutrients=estimates,
@@ -772,7 +779,123 @@ add_recipe('banana-shake','Banana milk shake, homemade','banana shake;banana mil
            [('banana',100),('milk-whole',230)], [('glass (320 mL, estimate)',320)],
            'Banana blended with about 225 mL whole cow’s milk. No sweetener is included.', added_sugar=0)
 
-data['chole']['aliases'].extend(['chola','choley'])
+add_recipe('shahi-paneer','Shahi paneer, homemade','shahi paneer;shahi panir;royal paneer;paneer in cashew cream gravy','Indian dishes','g',600,
+           [('paneer',230),('tomato',160),('onion',90),('curd',70),('cashews',25),('cream',35),('ghee',10),
+            ('ginger',6),('garlic',6),('cumin',1.5),('cardamom',1),('salt',2),('water',40)],
+           [('katori (150 g, estimate)',150),('larger serving (225 g, estimate)',225)],
+           'Tomato-style shahi paneer with curd, cashews, cream and ghee. Richness changes with the dairy and nut amounts.',
+           reference='https://www.sanjeevkapoor.com/Recipe/shahi-paneer-12062752')
+add_recipe('palak-paneer-home','Palak paneer, homemade','palak paneer;palak panir;spinach paneer;paneer in spinach gravy','Indian dishes','g',570,
+           [('spinach-cooked',280),('paneer',190),('onion',60),('tomato',60),('canola-oil',10),('cream',20),
+            ('garlic',6),('ginger',6),('green-chili',4),('cumin',1.5),('salt',1.8)],
+           [('katori (150 g, estimate)',150),('larger serving (225 g, estimate)',225)],
+           'Cooked spinach gravy with paneer and a little cream. Cream and oil can differ in a takeaway version.',
+           reference='https://www.vegrecipesofindia.com/palak-paneer/')
+add_recipe('aloo-sabzi','Aloo sabzi / jeera aloo, homemade dry','aloo sabzi;aloo sabji;aloo subzi;alu sabzi;jeera aloo;dry potato sabzi;cumin potatoes','Indian dishes','g',390,
+           [('potato-boiled',370),('canola-oil',18),('ginger',6),('cumin',3),('coriander-seed',2),
+            ('green-chili',3),('turmeric',1),('lemon-juice',8),('cilantro',5),('salt',1.6)],
+           [('katori (125 g, estimate)',125),('larger katori (150 g, estimate)',150)],
+           'Dry spiced potato dish with cumin. One 125 g katori includes about 5.8 g of added cooking oil under this model.',
+           reference='https://www.indianhealthyrecipes.com/jeera-aloo-recipe/')
+add_recipe('aloo-tamatar','Aloo tamatar sabzi, homemade gravy','aloo tamatar;aloo sabzi gravy;aloo ki sabzi;potato curry;wet aloo sabzi','Indian dishes','g',600,
+           [('potato-boiled',330),('tomato',140),('onion',70),('canola-oil',12),('ginger',5),('garlic',6),
+            ('cumin',2),('turmeric',1),('coriander-seed',2),('salt',1.8),('water',80)],
+           [('katori (150 g, estimate)',150)],
+           'Potatoes simmered with onion and tomato gravy. This modeled yield includes the gravy.',
+           reference='https://www.indianhealthyrecipes.com/potato-curry-aloo-sabzi/')
+add_recipe('bhatura','Bhatura, homemade fried bread','bhatura;bhature;batura;bature;bhatoora;bhatoore;bhatura bread','Grains & breads','g',300,
+           [('maida',160),('sooji',30),('curd',90),('water',48),('sugar',7),('salt',2),('baking-soda',1),('canola-oil',40)],
+           [('piece (75 g, estimate)',75),('large piece (100 g, estimate)',100)],
+           'Four 75 g fried breads. The model counts 10 g oil per piece, including 2.5 g in the dough and 7.5 g absorbed during frying. Actual uptake can vary substantially.',
+           added_sugar=7, reference='https://www.vegrecipesofindia.com/bhatura-recipe-bhature-bhatura/')
+add_recipe('chole-bhatura','Chole bhatura, homemade plate','chola bhatura;chole bhature;chola bhature;chana bhatura;chana bhature;chole bhatura;chhole bhature;choley bhature;chole bature','Indian dishes','g',225,
+           [('chole',150),('bhatura',75)],
+           [('plate with 1 bhatura (225 g, estimate)',225)],
+           'One plate means 150 g chickpea curry and one 75 g fried bread. Log extra bhatura separately. Oil uptake, serving size and accompaniments vary.',
+           added_sugar=1.75, reference='https://www.vegrecipesofindia.com/chole-bhature/')
+add_recipe('aloo-gobi','Aloo gobi sabzi, homemade','aloo gobi;aloo gobhi;potato cauliflower sabzi;aloo phool gobi','Indian dishes','g',410,
+           [('potato-boiled',160),('cauliflower',180),('tomato',65),('onion',40),('canola-oil',12),
+            ('ginger',6),('cumin',2),('turmeric',1),('salt',1.6)],
+           [('katori (125 g, estimate)',125)],
+           'Potato and cauliflower without peas, cooked down with spices and measured oil.',
+           reference='https://www.indianhealthyrecipes.com/aloo-gobi-recipe/')
+add_recipe('gobi-matar','Gobi matar sabzi, homemade','gobi matar;gobhi matar;cauliflower peas sabzi;phool gobi matar','Indian dishes','g',410,
+           [('cauliflower',220),('peas',100),('onion',55),('tomato',65),('canola-oil',12),('ginger',6),
+            ('garlic',6),('cumin',2),('turmeric',1),('salt',1.6)],
+           [('katori (125 g, estimate)',125)],
+           'Cauliflower and green peas without potatoes, with a light onion-tomato masala.',
+           reference='https://www.vegrecipesofindia.com/gobi-matar-recipe-gobi-recipes/')
+add_recipe('gajar-matar','Gajar matar sabzi, homemade','gajar matar;gajar mutter;carrot peas sabzi;gajar matar ki sabzi','Indian dishes','g',355,
+           [('carrots-cooked',215),('peas',125),('canola-oil',10),('ginger',6),('cumin',2),('turmeric',0.5),('salt',1.3)],
+           [('katori (125 g, estimate)',125)],
+           'Carrot and peas without potatoes, tossed with cumin, ginger and measured oil.')
+add_recipe('kaddu-sabzi','Kaddu sabzi, homemade','kaddu sabzi;kaddu ki sabji;kaddu subzi;pumpkin sabzi;sitaphal sabzi;petha sabzi','Indian dishes','g',340,
+           [('pumpkin-cooked',320),('canola-oil',11),('ginger',5),('cumin',2),('turmeric',0.8),('lemon-juice',8),('salt',1.3)],
+           [('katori (125 g, estimate)',125)],
+           'Spiced orange pumpkin with lemon and measured oil. This version uses pumpkin, since petha can also mean ash gourd.',
+           reference='https://www.indianhealthyrecipes.com/pumpkin-curry-gummadikaya-kura-kaddu-ki-subji/')
+add_recipe('arbi-sabzi','Arbi sabzi, homemade','arbi sabzi;arvi sabzi;arbi fry;arbi ki sabji;taro root sabzi;colocasia sabzi','Indian dishes','g',320,
+           [('taro-cooked',315),('canola-oil',14),('cumin',2),('coriander-seed',2),('turmeric',0.8),('lemon-juice',8),('salt',1.3)],
+           [('katori (125 g, estimate)',125)],
+           'Cooked taro root finished in measured oil and spices. Some fried versions absorb more oil.',
+           reference='https://www.vegrecipesofindia.com/sukhi-arbi-recipe-sukhi-arbi/')
+add_recipe('matar-sabzi','Matar ki sabzi, homemade','matar ki sabzi;matar sabzi;mutter sabzi;green peas sabzi;dry peas sabzi','Indian dishes','g',300,
+           [('peas',285),('canola-oil',9),('cumin',2),('ginger',4),('green-chili',2),('lemon-juice',6),('salt',1.3)],
+           [('katori (125 g, estimate)',125)],
+           'Dry sabzi made with tender green peas, cumin and measured oil.',
+           reference='https://www.vegrecipesofindia.com/matar-ki-sabji/')
+add_recipe('mixed-veg-sabzi','Mixed vegetable sabzi, homemade','mixed veg sabzi;mix veg;mix veg sabji;vegetable sabzi;mixed vegetable curry','Indian dishes','g',500,
+           [('cauliflower',130),('carrots-cooked',85),('green-beans',70),('peas',70),('green-capsicum',45),
+            ('onion',55),('tomato',75),('canola-oil',12),('cumin',2),('turmeric',0.8),('salt',1.8)],
+           [('katori (125 g, estimate)',125),('larger katori (150 g, estimate)',150)],
+           'Cauliflower, carrots, beans, peas and capsicum in a tomato-onion base. This version contains no cream, paneer or potatoes.',
+           reference='https://www.vegrecipesofindia.com/mix-veg-recipe-indian/')
+
+cofid_url = 'https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid'
+cofid_keys = ('kcal', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'saturatedFat', 'sodium',
+              'calcium', 'iron', 'potassium', 'vitaminC', 'vitaminB12', 'magnesium', 'zinc', 'vitaminD')
+# CoFID 2021 sheets 1.3, 1.4, 1.5 and 1.8. Blank and trace cells are omitted.
+cofid_rows = """13-243|methi-leaves|Fenugreek leaves, fresh raw|methi leaves;methi patta;fresh methi|0|35,4.6,4.8,0.2,,,,76,140,8.8,31,91,0,59,,0
+13-256|tinda-raw|Tinda / round gourd, raw|raw tinda;tinda gourd;round gourd;apple gourd|0|21,1.4,3.6,0.2,,2.8,,35,25,0.9,24,18,0,14,,0
+15-625|tori-sabzi|Tori / turai sabzi, CoFID reference|tori sabzi;turai sabzi;turai ki sabji;tori ki subji;tori subzi;nenua sabzi|125|108,1.9,3.9,9.5,3,3.9,1.03,459,36,1.18,382,2,0,27,0.3,0
+15-626|tinda-sabzi|Tinda sabzi, CoFID reference|tinda sabzi;tinda sabji;tinda subji;tinda masala;round gourd sabzi|125|95,1.6,4.1,8.1,2.8,4.1,0.83,408,34,0.6,279,1,0,21,0.3,0
+15-788|tinda-aloo|Tinda and potato curry, CoFID reference|tinda aloo;aloo tinda;tinda aloo sabzi;round gourd potato curry|150|74,1.6,8.5,3.9,,3.5,0.56,43,23,0.71,232,9,0,17,,0
+15-628|aloo-methi|Aloo methi sabzi, CoFID reference|methi aloo;aloo methi;methi sabzi;potato fenugreek sabzi|125|142,2.7,10.1,10.4,2.9,1.5,1.06,537,70,1.69,342,4,0,26,0.3,0
+15-671|cabbage-sabzi|Patta gobi / cabbage sabzi, CoFID reference|band gobi;band gobhi;patta gobi;patta gobhi;cabbage sabzi;patta gobhi ki sabji|125|77,2.8,6.8,4.5,4.4,5.9,0.32,8,62,0.66,341,32,0,17,0.3,0
+15-675|cabbage-aloo|Cabbage and potato sabzi, CoFID reference|aloo patta gobi;band gobi aloo;cabbage potato sabzi|125|108,2.7,9.6,6.8,4.1,4.9,0.48,7,52,0.61,384,23,0,19,0.3,0
+15-677|gajar-aloo-matar|Gajar aloo matar sabzi, CoFID reference|gajar aloo matar;carrot potato pea sabzi|125|128,2.1,12.9,7.9,4.1,6.7,0.59,17,30,0.67,295,6,0,17,0.3,0
+15-024|beans-sabzi|French beans sabzi, CoFID reference|beans sabzi;green beans sabzi;french beans sabji;french beans bhaji|125|91,2.2,5,7.6,,4.1,0.7,460,46,1.9,280,7,0,26,0.3,0
+15-756|karela-sabzi|Karela sabzi, CoFID reference|karela sabzi;karela sabji;karela curry;bitter gourd sabzi|125|111,1.6,4.6,9.7,1.2,3.3,1.38,2,27,1.11,327,64,0,26,0.3,0
+15-627|bhindi-cofid|Bhindi sabzi, CoFID reference|bhindi cofid;okra onion tomato curry;bhindi ki subji|125|71,2.9,4.9,4.6,7.2,4.4,0.4,437,108,0.78,372,,0,56,0.6,0
+15-683|sarson-saag-cofid|Mustard greens and spinach saag, CoFID reference|saag reference;sarson saag reference;mustard spinach saag|150|84,3.1,3.8,6.5,,1.6,3.75,135,163,2.6,458,30,0,47,,0.1
+15-048|mixed-veg-punjabi|Punjabi mixed vegetable bhaji, CoFID reference|punjabi mix veg;punjabi mixed sabzi;vegetable bhaji|125|120,3.5,8.2,8.6,,5.5,1,390,40,1.5,340,12,0,23,0.6,0
+11-911|poori|Poori / puri, CoFID fried bread reference|poori;puri;fried chapati;whole wheat puri|30|366,7.2,36.5,22.3,3.5,1.2,2.66,279,109,2.47,180,0,0,39,1.1,0"""
+for line in cofid_rows.splitlines():
+    code, ident, name, aliases, portion, values = line.split('|')
+    nutrients = {key: float(value) for key, value in zip(cofid_keys, values.split(','), strict=True) if value}
+    portion = int(portion)
+    category = 'Vegetables' if portion == 0 else 'Grains & breads' if ident == 'poori' else 'Indian dishes'
+    if 'fiber' in nutrients:
+        # CoFID's user guide recommends dividing monosaccharide equivalents by 1.05
+        # for mixed carbohydrate before adding AOAC dietary fibre to approximate total.
+        nutrients['carbs'] = round(nutrients['carbs'] / 1.05 + nutrients['fiber'], 2)
+        carb_note = 'Estimated total carbs use reported available carbs ÷ 1.05 plus measured fibre.'
+    else:
+        carb_note = 'Carbs are available carbohydrate as published, exclude fibre and are not directly comparable to total carbs.'
+    source = dict(label='UK Public Health England · CoFID 2021 reference', url=cofid_url,
+                  note=f'CoFID food code {code}. {carb_note} '
+                       'Reference values vary with ingredients, oil and preparation. Crown copyright, OGL v3.0.')
+    data[ident] = dict(id=ident, name=name, category=category, basis='g', nutrients=nutrients,
+                       aliases=aliases.split(';'), source=source)
+    if portion:
+        unit = 'piece' if ident == 'poori' else 'katori'
+        data[ident]['portions'] = [dict(label=f'{unit} ({portion} g, estimate)', amount=portion)]
+
+data['chole']['aliases'].extend(['chola','choley','chhole'])
+data['palak-paneer']['aliases'].extend(['restaurant palak paneer','delivery palak paneer','zomato palak paneer'])
+data['sabzi']['aliases'].extend(['aloo gobi matar','aloo gobhi matar','potato cauliflower pea sabzi'])
+data['bhindi-sabzi']['aliases'].extend(['bhindi sabji','bhindi subzi','okra curry'])
+data['lauki-sabzi']['aliases'].extend(['lauki ki sabzi','lauki subzi','dudhi sabzi'])
 data['sabzi-reference']['aliases'].extend(['restaurant vegetable curry','delivery vegetable curry','zomato vegetable curry'])
 data['chicken-curry']['aliases'].extend(['restaurant chicken curry','delivery chicken curry','zomato chicken curry'])
 data['biryani-chicken']['aliases'].extend(['restaurant chicken biryani','delivery chicken biryani','zomato chicken biryani'])
