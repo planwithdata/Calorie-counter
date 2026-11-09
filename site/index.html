@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7ef">
+  <meta name="description" content="A private, offline-first food diary for everyday Indian meals.">
+  <title>Daily Katori · Food diary</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="shell header">
+    <a class="brand" href="#diary"><img src="./icon.svg" width="42" height="42" alt=""><span>Daily Katori<small>YOUR PERSONAL FOOD DIARY</small></span></a>
+    <span class="local"><span></span> Stored on this device</span>
+  </header>
+  <main class="shell">
+    <nav aria-label="Views">
+      <a href="#diary">Diary</a><a href="#foods">My foods</a><a href="#review">Weekly review</a><a href="#settings">Settings</a>
+    </nav>
+    <div id="status" class="notice" role="status" hidden></div>
+    <section id="diary">
+      <div class="intro"><div><p class="eyebrow">FOOD DIARY</p><h1>Your day</h1></div>
+        <div class="date-control"><button id="previous" class="quiet" type="button" aria-label="Previous day">‹</button><input id="day" type="date" aria-label="Diary date"><button id="next" class="quiet" type="button" aria-label="Next day">›</button><button id="today" class="quiet" type="button">Today</button></div>
+      </div>
+      <div id="summary" class="summary" aria-label="Daily nutrition"></div>
+      <details class="panel compact" id="details"><summary>More nutrients</summary><div id="extra-nutrients" class="details-grid"></div></details>
+      <div class="section-head"><div><h2>Meals</h2><p>Search the catalog or repeat a meal you know.</p></div><label class="check"><input id="complete" type="checkbox"> Day complete</label></div>
+      <div id="meals" class="meals"></div>
+    </section>
+    <section id="foods" hidden>
+      <div class="intro"><div><p class="eyebrow">YOUR LIBRARY</p><h1>My foods</h1><p class="subhead">Browse the catalog and save your own labels, recipes and portions.</p></div>
+        <div class="actions"><button type="button" id="new-food">+ Custom food</button><button type="button" class="secondary" id="new-recipe">+ Recipe</button></div>
+      </div>
+      <div class="panel"><label for="catalog-query">Search foods</label><input id="catalog-query" type="search" placeholder="Try dal, chapati or dahi"><p id="catalog-count" class="muted"></p><div id="catalog-list" class="results"></div><button id="more-foods" type="button" class="secondary" hidden>Show more</button></div>
+      <div class="section-head"><div><h2>Saved meals</h2><p>Save a combination from the diary to repeat it later.</p></div></div>
+      <div class="panel" id="saved-meals"></div>
+    </section>
+    <section id="review" hidden>
+      <div class="intro"><div><p class="eyebrow">YOUR PATTERNS</p><h1>Weekly review</h1><p class="subhead" id="review-range"></p></div></div>
+      <div id="review-content" class="review-grid"></div>
+      <p class="muted footnote">Food variety guidance draws on the <a href="https://www.nin.res.in/dietaryguidelines/pdfjs/locale/DGI24thJune2024fin.pdf" target="_blank" rel="noopener noreferrer">ICMR–NIN Dietary Guidelines for Indians</a>.</p>
+    </section>
+    <section id="settings" hidden>
+      <div class="intro"><div><p class="eyebrow">MAKE IT YOURS</p><h1>Settings</h1></div></div>
+      <div class="settings-grid">
+        <form id="settings-form" class="panel">
+          <h2>Daily targets</h2><p class="muted">Use the goals you already follow. Fields are optional.</p>
+          <div class="fields"><label>Calories (kcal)<input name="kcal" type="number" min="1" max="20000" step="any" placeholder="Optional"></label><label>Protein (g)<input name="protein" type="number" min="1" max="1000" step="any" placeholder="Optional"></label></div>
+          <label>Food preference<select name="diet"><option value="any">No preference</option><option value="vegetarian">Vegetarian</option><option value="vegan">Vegan</option></select></label>
+          <button type="submit">Save targets</button>
+        </form>
+        <div class="panel">
+          <h2>Data and backups</h2><p class="muted">This browser holds your diary. Use a JSON backup to restore it or move it to another device.</p>
+          <div class="actions"><button id="backup" type="button">Download JSON</button><button id="restore" class="secondary" type="button">Restore JSON</button><button id="csv" class="secondary" type="button">Export CSV</button></div>
+          <p id="last-backup" class="muted"></p>
+          <input id="backup-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <div class="panel">
+          <h2>Personal catalog import</h2><p class="muted">Import a local nutrition JSON file as a separate personal catalog. It stays in this browser and travels with your backup.</p>
+          <div class="actions"><button id="import-catalog" type="button" class="secondary">Import foods</button><button id="sample-catalog" type="button" class="quiet">Download example format</button></div>
+          <input id="catalog-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <div class="panel"><h2>Offline use</h2><p id="offline-status" class="muted">Checking offline availability…</p><p class="muted">Open your browser menu to install or add Daily Katori to your home screen.</p></div>
+      </div>
+    </section>
+  </main>
+  <footer class="shell footer"><span>Daily Katori</span><span>Made for everyday meals.</span></footer>
+  <dialog id="modal" aria-labelledby="modal-title">
+    <div class="modal-head"><h2 id="modal-title"></h2><button id="close-modal" class="quiet" type="button" aria-label="Close dialog">×</button></div>
+    <div id="modal-body"></div>
+  </dialog>
+</body>
+</html>

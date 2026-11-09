@@ -1,0 +1,12 @@
+{
+  "name": "Daily Katori",
+  "short_name": "Daily Katori",
+  "description": "Your personal food diary",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f7ef",
+  "theme_color": "#f7f7ef",
+  "icons": [{"src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

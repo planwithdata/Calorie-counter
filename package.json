@@ -1,0 +1,9 @@
+{
+  "name": "daily-katori",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --experimental-test-isolation=none",
+    "start": "node serve.mjs"
+  }
+}
