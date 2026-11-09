@@ -614,7 +614,11 @@ async function init() {
   if ('serviceWorker' in navigator) {
     try {
       await navigator.serviceWorker.register('./sw.js');
+      const timeout = setTimeout(() => {
+        $('offline-status').textContent = 'Offline setup is taking longer than expected. Reload while online to retry.';
+      }, 15000);
       await navigator.serviceWorker.ready;
+      clearTimeout(timeout);
       $('offline-status').textContent = 'Ready offline on this browser.';
     } catch {
       $('offline-status').textContent = 'Offline setup could not finish. Reload while online to try again.';

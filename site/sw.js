@@ -3,11 +3,20 @@ const cacheName = prefix + '__DEPLOYMENT_REVISION__';
 const assets = ['./', './index.html', './style.css', './app.js', './core.js', './storage.js',
   './catalog.json', './icon.svg', './manifest.webmanifest'];
 
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(
+self.addEventListener('install', event => event.waitUntil(cacheApp()));
+
+async function cacheApp() {
+  const cache = await caches.open(cacheName);
+  const download = () => cache.addAll(
     assets.map(asset => new Request(new URL(asset, self.registration.scope), { cache: 'reload' })),
-  )));
-});
+  );
+  try {
+    await download();
+  } catch {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await download();
+  }
+}
 
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith(prefix) && key !== cacheName)
