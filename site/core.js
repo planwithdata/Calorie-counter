@@ -192,7 +192,7 @@ export function validateCatalog(list) {
 }
 
 export function validateBackup(backup) {
-  if (!record(backup) || backup.version !== backupVersion) throw new Error('This JSON is not a supported Daily Katori backup.');
+  if (!record(backup) || backup.version !== backupVersion) throw new Error('This JSON is not a supported BabyNeKhanaKhaya? backup.');
   const state = backup.data;
   if (!record(state) || !record(state.settings) || !record(state.completed)
     || !Array.isArray(state.entries) || !state.entries.every(isEntry) || !unique(state.entries.map(entry => entry.id))

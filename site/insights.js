@@ -199,7 +199,7 @@ export function mealGroups(entries) {
 
 export function summaryText(report, settings, display) {
   const lines = [
-    'Daily Katori weekly nutrition summary',
+    'BabyNeKhanaKhaya? weekly nutrition summary',
     `${prettyDay(report.start)} to ${prettyDay(report.end)}`,
     `${report.complete.length} complete days of ${report.logged} logged days`,
   ];

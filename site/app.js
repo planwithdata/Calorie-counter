@@ -869,12 +869,12 @@ function bind() {
   $('backup').onclick = async () => {
     const exportedAt = new Date().toISOString();
     await save(draft => { draft.settings.lastBackup = exportedAt; }, 'Backup export requested.', () =>
-      download(`daily-katori-${today()}.json`, JSON.stringify({ version: backupVersion, exportedAt, data: state }, null, 2), 'application/json'));
+      download(`babynekhana-khaya-${today()}.json`, JSON.stringify({ version: backupVersion, exportedAt, data: state }, null, 2), 'application/json'));
   };
   $('csv').onclick = async () => {
     try {
       const latest = await loadDiary(db);
-      download(`daily-katori-${today()}.csv`, '\uFEFF' + diaryCsv(latest.entries), 'text/csv;charset=utf-8');
+      download(`babynekhana-khaya-${today()}.csv`, '\uFEFF' + diaryCsv(latest.entries), 'text/csv;charset=utf-8');
     } catch { message('Could not export the diary.', true); }
   };
   $('restore').onclick = () => $('backup-file').click();
@@ -901,7 +901,7 @@ function bind() {
         () => save(draft => { draft.foods = [...draft.foods.filter(food => !ids.has(food.id)), ...imported]; }, 'Personal foods imported.'));
     } catch (error) { message(error.message, true); }
   };
-  $('sample-catalog').onclick = () => download('daily-katori-food-example.json', JSON.stringify([{
+  $('sample-catalog').onclick = () => download('babynekhana-khaya-food-example.json', JSON.stringify([{
     id: 'personal-example', name: 'Example food (replace with your label)', category: 'Custom food', basis: 'g',
     aliases: ['example'], nutrients: { kcal: 100, protein: 4 }, portions: [{ label: 'serving', amount: 75 }],
     source: { label: 'Package label', note: 'Nutrients in this file are per 100 g.' },
@@ -924,7 +924,7 @@ async function init() {
     bind();
     render();
   } catch (error) {
-    message(`Daily Katori could not start. ${error.message} Reload and check that browser storage is available.`, true);
+    message(`Could not start BabyNeKhanaKhaya? ${error.message} Reload and check that browser storage is available.`, true);
     return;
   }
   if ('serviceWorker' in navigator) {

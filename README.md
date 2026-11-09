@@ -1,4 +1,4 @@
-# Daily Katori
+# BabyNeKhanaKhaya?
 
 A personal food diary for Indian meals, with local search, recipes, household portions, weekly insights and backups. The static app in `site/` runs without a backend or account.
 
