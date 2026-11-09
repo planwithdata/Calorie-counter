@@ -86,6 +86,28 @@ dialog::backdrop { background: #142f26a0; }
 .portion-preview { border: 1px solid var(--line); background: var(--soft); border-radius: 10px; padding: .7rem; }
 .recipe-row { display: grid; grid-template-columns: 1.5fr 1fr auto; gap: .45rem; margin-bottom: .5rem; align-items: end; }
 .tag { display: inline-block; border-radius: 999px; padding: .24rem .55rem; font-size: .74rem; background: var(--soft); color: var(--green); }
+.nutrition-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
+.nutrition-caption { margin: .7rem 0; }
+.nutrition-panels { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: .75rem; }
+.nutrition-panels > .panel { min-width: 0; }
+.nutrition-panels .wide { grid-column: 1 / -1; }
+.table-scroll { overflow-x: auto; }
+.nutrition-table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.nutrition-table :is(th,td) { border-bottom: 1px solid var(--line); text-align: left; padding: .48rem .45rem; }
+.nutrition-table th { font-weight: 650; }
+.nutrition-table tbody tr:last-child :is(th,td) { border-bottom: 0; }
+.nutrition-table .metric-select { border: 0; color: var(--green); background: transparent; padding: .15rem 0; min-height: 30px; text-decoration: underline; text-align: left; }
+.nutrition-table .metric-select[aria-pressed="true"] { background: var(--soft); padding-inline: .3rem; text-decoration: none; }
+.nutrition-bar { display: block; height: .28rem; border-radius: 4px; background: #4f846a; margin-top: .25rem; }
+.target-fields, #nutrition-suggestions { margin-top: .7rem; }
+.suggestion { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .7rem; }
+.summary-text { width: 100%; min-height: 14rem; resize: vertical; color: var(--ink); background: white; border: 1px solid #acbaac; border-radius: 9px; padding: .6rem; font: inherit; }
+.report-status { display: inline-block; border-radius: 7px; background: #ecefea; color: #425348; padding: .18rem .38rem; font-size: .74rem; font-weight: 650; }
+.report-status.met { background: #e0f0dd; color: #245232; }
+.report-status.below { background: #f9ebcc; color: #724c0a; }
+.report-status.over { background: #f9e1dc; color: #812f28; }
+.report-detail { display: block; margin-top: .15rem; }
+#nutrition .actions { align-items: end; }
 @media (max-width: 650px) {
   .shell { width: calc(100% - 1.2rem); }
   .header { min-height: 67px; }
@@ -97,4 +119,7 @@ dialog::backdrop { background: #142f26a0; }
   .stat:nth-child(2) { border-left: 0; }
   .stat { padding: .7rem .48rem; }
   .meals, .settings-grid, .review-grid { grid-template-columns: 1fr; }
+  .nutrition-panels { grid-template-columns: 1fr; }
+  .nutrition-controls { grid-template-columns: 1fr 1fr; }
+  .nutrition-controls label:last-child { grid-column: 1 / -1; }
 }

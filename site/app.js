@@ -1,13 +1,17 @@
 import {
   backupVersion, calculateRecipe, diaryCsv, findFoods, makeEntry, meals, nutrients, nutrientKeys,
-  parseQuantity, prettyDay, shiftDay, summarize, today, validateBackup, validateCatalog, weeklyReview,
+  parseQuantity, prettyDay, shiftDay, summarize, targetKeys, today, upperTargets, validateBackup, validateCatalog, weeklyReview,
 } from './core.js';
+import {
+  adultReferences, compareMeal, dayReferenceStatus, foodContributions, mealGroups, mealSuggestions,
+  nutritionReport, reportReference, summaryText, targetFor, trendReferenceStatus,
+} from './insights.js';
 import { loadDiary, openDiary, updateDiary } from './storage.js';
 
 const $ = id => document.getElementById(id);
 const dialog = $('modal');
 const modal = $('modal-body');
-const tabs = ['diary', 'foods', 'review', 'settings'];
+const tabs = ['diary', 'nutrition', 'foods', 'review', 'settings'];
 const numberFormat = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 });
 const format = number => numberFormat.format(number);
 const size = (number, unit) => `${format(number)} ${unit}`;
@@ -15,6 +19,7 @@ const nutrient = (key, amount) => amount == null ? 'Unknown' : size(amount, nutr
 const primary = nutrientKeys.slice(0, 5);
 const sourceTypes = ['Package label', 'Restaurant nutrition label', 'Restaurant estimate', 'Personal estimate'];
 const presets = ['Whey protein', 'ON Serious Mass', 'ON Creatine', 'BCAA', 'MIILD Protein Roti', 'Zomato order'];
+const guidanceUrl = 'https://www.nin.res.in/dietaryguidelines/pdfjs/locale/DGI24thJune2024fin.pdf';
 let db, state, catalog, day = today(), foodLimit = 24, alertTimer;
 
 function element(tag, options = {}, ...children) {
@@ -63,7 +68,8 @@ function formError(form, text) {
 }
 
 function allFoods() {
-  return [...state.foods, ...catalog];
+  const personalIds = new Set(state.foods.map(food => food.id));
+  return [...state.foods, ...catalog.filter(food => !personalIds.has(food.id))];
 }
 
 function search(query) {
@@ -102,7 +108,7 @@ function renderDiary() {
   const coverage = key => total[key].known > 0 && total[key].known < total[key].total
     ? `Partial · ${total[key].known}/${total[key].total} items` : '';
   $('summary').replaceChildren(...primary.map(key => {
-    const target = state.settings[key];
+    const target = targetFor(state.settings, key);
     return element('div', { className: 'stat' }, element('span', { textContent: nutrients[key][0] }),
       element('strong', { textContent: display(key) }),
       element('small', { textContent: coverage(key) || (target ? `Goal ${nutrient(key, target)}` : '') }));
@@ -119,7 +125,8 @@ function renderDiary() {
         element('small', { textContent: `${size(entry.quantity, entry.unit)} · ${nutrient('kcal', entry.nutrients.kcal)}` })),
       button('Edit', () => editEntry(entry))));
     const footer = element('div', { className: 'actions' });
-    if (list.length) footer.append(button('Save this meal', () => saveMeal(meal, list)));
+    if (list.length) footer.append(button('Save this meal', () => saveMeal(meal, list)),
+      button('Preview a change', () => showMealPreview(meal)));
     if (state.savedMeals.length) footer.append(button('Repeat saved meal', () => repeatMeal(meal)));
     return element('article', { className: 'panel meal' }, header,
       ...(rows.length ? rows : [element('p', { className: 'empty', textContent: 'Nothing logged here yet.' })]), footer);
@@ -127,7 +134,12 @@ function renderDiary() {
 }
 
 function renderFoods() {
-  const results = search($('catalog-query').value);
+  const group = $('catalog-category');
+  const selection = group.value;
+  const groups = [...new Set(allFoods().map(food => food.category))].sort();
+  group.replaceChildren(option('', 'All food groups'), ...groups.map(name => option(name)));
+  group.value = groups.includes(selection) ? selection : '';
+  const results = search($('catalog-query').value).filter(food => !group.value || food.category === group.value);
   $('catalog-count').textContent = `${results.length} matching foods · ${allFoods().length} in your catalog`;
   $('catalog-list').replaceChildren(...results.slice(0, foodLimit).map(food => foodRow(food, inspectFood, 'View')));
   $('more-foods').hidden = results.length <= foodLimit;
@@ -139,8 +151,260 @@ function renderFoods() {
   if (!state.savedMeals.length) $('saved-meals').append(element('p', { className: 'empty', textContent: 'Your saved meals will appear here.' }));
 }
 
+function option(value, text = value) {
+  return element('option', { value, textContent: text });
+}
+
+function table(headers, rows) {
+  return element('div', { className: 'table-scroll' }, element('table', { className: 'nutrition-table' },
+    element('thead', {}, element('tr', {}, ...headers.map(heading => element('th', { scope: 'col', textContent: heading })))),
+    element('tbody', {}, ...rows.map(([label, ...values]) => element('tr', {},
+      element('th', { scope: 'row' }, label), ...values.map(value => element('td', {}, value)))))));
+}
+
+function shownTotal(key, total, empty = '—') {
+  if (!total.total) return empty;
+  const missing = total.total - total.known;
+  if (missing && total.known) return `${nutrient(key, total.value)} (partial)`;
+  return nutrient(key, total.value);
+}
+
+function nutritionPanel(heading, ...content) {
+  return element('section', { className: 'panel' }, element('h2', { textContent: heading }), ...content);
+}
+
+function statusBadge(status) {
+  const container = element('span', { className: 'report-detail' });
+  if (status) {
+    container.append(element('span', { className: `report-status ${status.tone}`, textContent: status.text }));
+    if (status.detail) container.append(element('small', { className: 'muted report-detail', textContent: status.detail }));
+  }
+  return container;
+}
+
+function referenceCell(key, reference, status) {
+  if (!reference) return '—';
+  const prefix = { minimum: '≥ ', maximum: '≤ ', under: '< ', target: '' };
+  return element('div', {}, `${prefix[reference.type]}${nutrient(key, reference.value)}`,
+    element('small', { className: 'muted report-detail', textContent: reference.label }), statusBadge(status));
+}
+
+function referenceNote() {
+  return element('p', { className: 'muted footnote' }, 'Colors compare logged intake with a daily target. Green means the reference was met. Calorie totals within 5% of your target are marked near target. ',
+    element('a', { href: 'https://www.who.int/news-room/fact-sheets/detail/healthy-diet', target: '_blank', rel: 'noopener noreferrer', textContent: 'WHO adult references' }),
+    ' cover fiber, sodium and potassium. Potassium from meals is an intake estimate. People with kidney disease or medicines that affect potassium may need a different target. ',
+    element('a', { href: 'https://ods.od.nih.gov/factsheets/potassium-Consumer/', target: '_blank', rel: 'noopener noreferrer', textContent: 'NIH potassium guidance' }));
+}
+
+function renderNutrition() {
+  $('nutrition-date').value = day;
+  const period = Number($('nutrition-period').value);
+  const focus = $('focus-nutrient').value;
+  const report = nutritionReport(state, day, period);
+  const selected = report.days.at(-1);
+  const dates = period === 1 ? prettyDay(day) : `${prettyDay(report.start)} – ${prettyDay(day)}`;
+  $('nutrition-coverage').textContent = period === 1
+    ? `${dates} · ${selected.entries.length} logged foods · ${selected.complete ? 'Day complete' : 'Day open'}`
+    : `${dates} · ${report.complete.length} complete days of ${report.logged} logged. Each average uses complete days with data for that nutrient.`;
+
+  const highlighted = new Set([...primary, ...Object.keys(adultReferences), focus,
+    ...targetKeys.filter(key => targetFor(state.settings, key))]);
+  const row = key => {
+    const metric = report.metrics[key];
+    const { average, covered } = metric;
+    const total = selected.totals[key];
+    const coverage = period === 1 ? `${total.known}/${total.total} foods` : `${covered.length}/${report.complete.length} days`;
+    const reference = reportReference(state.settings, key);
+    const status = period === 1 ? dayReferenceStatus(total, selected.complete, reference) : trendReferenceStatus(metric, key, reference);
+    const label = button(nutrients[key][0], () => {
+      $('focus-nutrient').value = key;
+      renderNutrition();
+      $('focus-nutrient').focus();
+    }, 'metric-select');
+    label.setAttribute('aria-pressed', String(focus === key));
+    return [label, period === 1 ? shownTotal(key, total) : (average == null ? '—' : nutrient(key, average)),
+      referenceCell(key, reference, status), coverage];
+  };
+  const headers = ['Nutrient', period === 1 ? 'Logged' : 'Average', 'Daily reference', 'Coverage'];
+  const extras = nutrientKeys.filter(key => !highlighted.has(key));
+  const totals = nutritionPanel(period === 1 ? 'Nutrient totals' : 'Daily averages',
+    table(headers, nutrientKeys.filter(key => highlighted.has(key)).map(row)));
+  if (extras.length) {
+    totals.append(element('details', { className: 'target-fields' }, element('summary', { textContent: 'More nutrients' }),
+      table(headers, extras.map(row))));
+  }
+  const contribution = foodContributions(period === 1 ? selected.entries : report.complete.flatMap(item => item.entries), focus);
+  const sources = nutritionPanel(`Top ${nutrients[focus][0].toLowerCase()} contributors`,
+    element('p', { className: 'muted', textContent: `${contribution.known} of ${contribution.count} entries have values${period === 1 ? '' : ' on complete days'}. Ranked by recorded amounts.` }));
+  if (contribution.foods.length) {
+    const max = contribution.foods[0].amount;
+    sources.append(table(['Food', 'Logged amount'], contribution.foods.slice(0, 8).map(item => {
+      const bar = element('span', { className: 'nutrition-bar' });
+      bar.style.width = `${item.amount / max * 100}%`;
+      return [item.name, element('span', {}, nutrient(focus, item.amount), bar)];
+    })));
+  } else sources.append(element('p', { className: 'empty', textContent: 'No positive amounts recorded for this nutrient.' }));
+
+  const mealPanel = nutritionPanel(`Meals on ${prettyDay(day)}`,
+    table(['Meal', ...primary.map(key => nutrients[key][0])], mealGroups(selected.entries)
+      .map(({ meal, totals }) => [meal, ...primary.map(key => shownTotal(key, totals[key]))])));
+  mealPanel.classList.add('wide');
+  const panels = element('div', { className: 'nutrition-panels' }, mealPanel, totals, sources);
+  if (period > 1) {
+    const reference = reportReference(state.settings, focus);
+    const trend = nutritionPanel(`${nutrients[focus][0]} by day`,
+      element('p', { className: 'muted', textContent: 'Open days and partial values are shown for context. Daily averages use fully covered, complete days.' }),
+      table(['Day', 'Recorded', 'Status'], report.days.map(item => [prettyDay(item.date), shownTotal(focus, item.totals[focus]),
+        element('div', {}, item.entries.length ? (item.complete ? 'Complete' : 'Open') : 'No entries',
+          statusBadge(dayReferenceStatus(item.totals[focus], item.complete, reference)))])));
+    trend.classList.add('wide');
+    panels.append(trend);
+  }
+  $('nutrition-overview').replaceChildren(panels, referenceNote());
+  renderSuggestions(selected.entries);
+}
+
+function renderSuggestions(dayEntries) {
+  const meal = $('preview-meal').value;
+  const entries = dayEntries.filter(entry => entry.meal === meal);
+  const week = nutritionReport(state, day, 7);
+  const items = mealSuggestions(week, entries, allFoods(), state.settings, week.days.flatMap(item => item.entries.map(entry => entry.foodId)));
+  const container = $('nutrition-suggestions');
+  container.replaceChildren();
+  if (!items.length) {
+    const text = !entries.length ? 'Choose a logged meal for tailored suggestions, or preview adding a food to this meal.'
+      : 'Suggestions appear when a saved target shows a repeated pattern across at least three fully covered, complete days. You can compare a change any time.';
+    container.append(element('p', { className: 'muted', textContent: text }));
+    return;
+  }
+  for (const item of items) {
+    const { action, entry, food, amount, pattern } = item;
+    const headline = action === 'add' ? `Add ${size(amount, food.basis)} of ${food.name}`
+      : action === 'reduce' ? `Reduce ${entry.name} to ${size(amount, entry.basis)}`
+      : `Swap ${entry.name} for ${size(amount, food.basis)} of ${food.name}`;
+    const observation = `${nutrients[pattern.key][0]} was ${pattern.direction} your ${nutrient(pattern.key, pattern.target)} target on ${pattern.count} of ${pattern.covered} fully covered days this week.`;
+    container.append(element('article', { className: 'suggestion' }, element('h3', { textContent: headline }),
+      element('p', { className: 'muted', textContent: observation }),
+      element('p', { className: 'muted', textContent: `Estimated ${nutrients[pattern.key][0].toLowerCase()} change: ${differenceText(pattern.key, item.comparison.difference[pattern.key])}.` }),
+      button('Preview suggestion', () => showMealPreview(meal, item), 'secondary')));
+  }
+  container.append(element('p', { className: 'muted footnote' },
+    'Suggestions compare your saved targets and logged foods. Food variety guidance: ',
+    element('a', { href: guidanceUrl, target: '_blank', rel: 'noopener noreferrer', textContent: 'ICMR–NIN Dietary Guidelines for Indians' })));
+}
+
+function differenceText(key, change) {
+  if (change == null) return 'Unknown';
+  return `${change > 0 ? '+' : ''}${nutrient(key, change)}`;
+}
+
+function showMealPreview(meal, suggested) {
+  const dayEntries = state.entries.filter(entry => entry.day === day);
+  const entries = dayEntries.filter(entry => entry.meal === meal);
+  const action = element('select', {}, option('add', 'Add a food'));
+  if (entries.length) action.append(option('reduce', 'Reduce a portion'), option('swap', 'Swap a food'));
+  action.value = suggested?.action || 'add';
+  const entry = element('select', {}, ...entries.map(item => option(item.id, `${item.name} · ${size(item.quantity, item.unit)}`)));
+  if (suggested?.entry) entry.value = suggested.entry.id;
+  const entryLabel = element('label', {}, 'Logged food', entry);
+  const query = element('input', { type: 'search', placeholder: 'Try rajma or Amul Gold' });
+  const matches = element('select', {});
+  const foodLabel = element('div', { className: 'stack' }, element('label', {}, 'Find a food', query),
+    element('label', {}, 'Choose a result', matches));
+  const quantity = element('input', { value: String(suggested?.amount ?? 100) });
+  const amountLabel = element('span');
+  const results = element('div');
+  let food = suggested?.food || null;
+  let matching = [];
+  const form = element('div', { className: 'stack' }, element('p', { className: 'muted',
+    textContent: `Preview for ${prettyDay(day)}. Your diary will keep the amounts you actually logged.` }),
+  element('label', {}, 'Change', action), entryLabel, foodLabel, element('label', {}, amountLabel, quantity), results);
+
+  function showMatches() {
+    matching = search(query.value).slice(0, 18);
+    if (food && !matching.some(item => item.id === food.id)) matching.unshift(food);
+    matches.replaceChildren(option('', 'Choose a food'), ...matching.map(item => option(item.id, item.name)));
+    matches.value = food?.id || '';
+  }
+
+  function update() {
+    const selected = entries.find(item => item.id === entry.value);
+    const reducing = action.value === 'reduce';
+    const basis = reducing ? selected?.basis : food?.basis;
+    entryLabel.hidden = action.value === 'add';
+    foodLabel.hidden = reducing;
+    amountLabel.textContent = `${reducing ? 'New portion amount' : 'Amount to add'}${basis ? ` (${basis})` : ''}`;
+    const raw = quantity.value.trim();
+    const amount = reducing && /^0+(?:\.0*)?$/.test(raw) ? 0 : parseQuantity(raw);
+    const change = { action: action.value, entryId: entry.value, food, amount };
+    const comparison = compareMeal(entries, change);
+    if (!comparison) {
+      results.replaceChildren(element('p', { className: 'muted', textContent: reducing
+        ? 'Enter an amount smaller than the logged portion. Use 0 to preview removing it.'
+        : 'Choose a food and enter a positive amount to preview the change.' }));
+      return;
+    }
+    const rows = keys => keys.map(key => [nutrients[key][0], shownTotal(key, comparison.before[key], nutrient(key, 0)),
+      shownTotal(key, comparison.after[key], nutrient(key, 0)), differenceText(key, comparison.difference[key])]);
+    results.replaceChildren(table(['Nutrient', 'Before', 'After', 'Change'], rows(primary)),
+      element('details', {}, element('summary', { textContent: 'Compare more nutrients' }),
+        table(['Nutrient', 'Before', 'After', 'Change'], rows(nutrientKeys.slice(5)))),
+      element('p', { className: 'muted footnote', textContent: 'A change can be calculated when the foods being changed have values for that nutrient.' }));
+    const targets = targetKeys.filter(key => targetFor(state.settings, key));
+    if (targets.length) {
+      const daily = compareMeal(dayEntries, change);
+      const targetRows = targets.map(key => [nutrients[key][0], shownTotal(key, daily.before[key], nutrient(key, 0)),
+        shownTotal(key, daily.after[key], nutrient(key, 0)),
+        `${upperTargets.includes(key) ? '≤ ' : ''}${nutrient(key, targetFor(state.settings, key))}`]);
+      results.append(element('h3', { textContent: 'Day totals against your targets' }),
+        table(['Nutrient', 'Before', 'After', 'Target'], targetRows));
+    }
+    if (!reducing) results.append(sourceInfo(food.source));
+  }
+  action.onchange = () => {
+    const current = entries.find(item => item.id === entry.value);
+    quantity.value = String(action.value === 'reduce' && current ? current.quantity * current.factor / 2 : 100);
+    update();
+  };
+  entry.onchange = () => {
+    const current = entries.find(item => item.id === entry.value);
+    if (action.value === 'reduce' && current) quantity.value = String(current.quantity * current.factor / 2);
+    update();
+  };
+  query.oninput = () => { food = null; showMatches(); update(); };
+  matches.onchange = () => {
+    food = matching.find(item => item.id === matches.value);
+    if (food) quantity.value = String(food.portions?.[0]?.amount || 100);
+    update();
+  };
+  quantity.oninput = update;
+  showMatches();
+  showDialog(`Preview ${meal.toLowerCase()}`, form);
+  update();
+}
+
+function showWeeklySummary() {
+  const text = summaryText(nutritionReport(state, day, 7), state.settings, nutrient);
+  const preview = element('textarea', { className: 'summary-text', readOnly: true, value: text });
+  const status = element('p', { className: 'muted', role: 'status' });
+  const copy = button('Copy summary', async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = 'Weekly summary copied.';
+    } catch {
+      preview.focus();
+      preview.select();
+      status.textContent = 'Summary selected. Use your device’s copy command.';
+    }
+  }, '');
+  showDialog('Weekly summary', element('div', { className: 'stack' },
+    element('p', { className: 'muted', textContent: 'Review these totals before sharing them. The summary is generated on this device.' }),
+    element('label', {}, 'Summary to copy', preview), copy, status));
+}
+
 function renderReview() {
   const review = weeklyReview(state, day);
+  const nutrientReport = nutritionReport(state, day, 7);
   $('review-range').textContent = `${prettyDay(review.start)} – ${prettyDay(review.end)} · ${review.complete} complete days of ${review.logged} logged`;
   const cards = [];
   const card = (heading, text) => element('article', { className: 'panel' },
@@ -178,12 +442,31 @@ function renderReview() {
       cards.push(card('Food variety', `No separate ${group} entries appeared on the ${review.complete} complete days. If you ate some in a mixed dish, it may already be part of that entry. Otherwise try adding a ${group} you enjoy to a usual meal.`));
     }
   }
+  const highlights = Object.keys(adultReferences).flatMap(key => {
+    const reference = reportReference(state.settings, key);
+    if (!reference) return [];
+    const metric = nutrientReport.metrics[key];
+    return [[nutrients[key][0], metric.average == null ? '—' : nutrient(key, metric.average),
+      referenceCell(key, reference, trendReferenceStatus(metric, key, reference))]];
+  });
+  if (highlights.length) {
+    const sodium = trendReferenceStatus(nutrientReport.metrics.sodium, 'sodium', reportReference(state.settings, 'sodium'));
+    const fiber = trendReferenceStatus(nutrientReport.metrics.fiber, 'fiber', reportReference(state.settings, 'fiber'));
+    cards.push(nutritionPanel('Nutrient highlights',
+      table(['Nutrient', 'Daily average', 'Daily reference'], highlights),
+      ...(sodium?.tone === 'over' ? [element('p', { className: 'muted footnote', textContent: 'Review your biggest sodium contributors and preview a smaller portion or a lower-sodium swap.' })] : []),
+      ...(fiber?.tone === 'below' ? [element('p', { className: 'muted footnote', textContent: 'Try previewing a portion of pulses, whole grains, fruit or vegetables you already eat.' })] : []),
+      element('p', { className: 'muted footnote' }, 'See ',
+        element('a', { href: '#nutrition', textContent: 'Nutrition' }), ' for daily values, coverage, and reference sources.')));
+  }
   $('review-content').replaceChildren(...cards);
 }
 
 function renderSettings() {
   const fields = $('settings-form').elements;
-  for (const key of ['kcal', 'protein', 'diet']) fields[key].value = state.settings[key] ?? '';
+  for (const key of ['kcal', 'protein', 'diet', 'goal']) fields[key].value = state.settings[key] ?? '';
+  for (const key of targetKeys.slice(2)) fields[key].value = targetFor(state.settings, key) ?? '';
+  fields.showReferences.checked = state.settings.showReferences !== false;
   $('last-backup').textContent = state.settings.lastBackup
     ? `Last backup export requested ${new Date(state.settings.lastBackup).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
     : 'No backup exported yet.';
@@ -198,6 +481,7 @@ function render() {
     else link.removeAttribute('aria-current');
   }
   if (current === 'diary') renderDiary();
+  if (current === 'nutrition') renderNutrition();
   if (current === 'foods') renderFoods();
   if (current === 'review') renderReview();
   if (current === 'settings') renderSettings();
@@ -522,6 +806,30 @@ function goToDay(value) {
 }
 
 function bind() {
+  $('focus-nutrient').replaceChildren(...nutrientKeys.map(key => option(key, nutrients[key][0])));
+  $('preview-meal').replaceChildren(...meals.map(meal => option(meal)));
+  $('preview-meal').value = 'Lunch';
+  const targetField = key => {
+    const [name, unit] = nutrients[key];
+    const qualifier = upperTargets.includes(key) ? ' limit' : ' target';
+    return element('label', {}, `${name}${qualifier} (${unit})`, element('input', {
+      name: key, type: 'number', min: '0.001', max: '100000', step: 'any', placeholder: 'Optional',
+    }));
+  };
+  $('primary-nutrient-targets').append(...['fiber', 'sodium'].map(targetField));
+  $('extra-nutrient-targets').append(...targetKeys.slice(4).map(targetField));
+  $('nutrition-period').onchange = renderNutrition;
+  $('focus-nutrient').onchange = renderNutrition;
+  $('nutrition-date').onchange = event => {
+    if (event.target.validity.valid && event.target.value) {
+      day = event.target.value;
+      renderNutrition();
+    }
+  };
+  $('preview-meal').onchange = () => renderSuggestions(state.entries.filter(entry => entry.day === day));
+  $('jump-preview').onclick = () => $('preview-heading').focus();
+  $('preview-change').onclick = () => showMealPreview($('preview-meal').value);
+  $('weekly-summary').onclick = showWeeklySummary;
   $('close-modal').onclick = () => dialog.close();
   $('previous').onclick = () => goToDay(shiftDay(day, -1));
   $('next').onclick = () => goToDay(shiftDay(day, 1));
@@ -537,6 +845,7 @@ function bind() {
     })) renderDiary();
   };
   $('catalog-query').oninput = () => { foodLimit = 24; renderFoods(); };
+  $('catalog-category').onchange = () => { foodLimit = 24; renderFoods(); };
   $('more-foods').onclick = () => { foodLimit += 24; renderFoods(); };
   $('new-food').onclick = () => customFood(null);
   $('new-recipe').onclick = () => recipeForm();
@@ -546,7 +855,16 @@ function bind() {
     const kcal = fields.kcal.valueAsNumber || null;
     const protein = fields.protein.valueAsNumber || null;
     const diet = fields.diet.value;
-    await save(draft => { Object.assign(draft.settings, { kcal, protein, diet }); }, 'Targets saved.');
+    const goal = fields.goal.value;
+    const showReferences = fields.showReferences.checked;
+    const nutrientTargets = Object.fromEntries(targetKeys.slice(2)
+      .filter(key => Number.isFinite(fields[key].valueAsNumber))
+      .map(key => [key, fields[key].valueAsNumber]));
+    await save(draft => {
+      Object.assign(draft.settings, { kcal, protein, diet, nutrientTargets, showReferences });
+      if (goal) draft.settings.goal = goal;
+      else delete draft.settings.goal;
+    }, 'Targets saved.');
   };
   $('backup').onclick = async () => {
     const exportedAt = new Date().toISOString();
@@ -565,8 +883,6 @@ function bind() {
       const json = await readJson(event.target);
       if (json === undefined) return;
       const restored = validateBackup(json);
-      const reserved = new Set(catalog.map(food => food.id));
-      if (restored.foods.some(food => reserved.has(food.id))) throw new Error('This backup contains a food ID reserved by the bundled catalog.');
       confirmAction('Restore this backup?', `This file contains ${restored.entries.length} entries, ${restored.foods.length} custom foods and ${restored.savedMeals.length} saved meals. Restoring replaces the current diary and settings on this device.`, 'Replace local diary',
         () => save(() => restored, 'Backup restored.'));
     } catch (error) { message(error.message, true); }

@@ -70,6 +70,19 @@ test('matches manufacturer serving values and keeps missing fields unknown', () 
   assert.deepEqual(totals.protein, { value: 7.1901, known: 1, total: 2 });
 });
 
+test('finds distinct Amul Gold formulations and scales their manufacturer values by volume', () => {
+  const gold = findFoods(foods, 'amul gold').filter(food => food.id.startsWith('amul-gold-'));
+  assert.equal(gold.length, 2);
+  assert.ok(gold.every(food => food.basis === 'ml'));
+  const pouch = entry('amul-gold-pouch', 1, 'glass', 200);
+  const carton = entry('amul-gold-uht', 1, 'glass', 200);
+  approximate(pouch.nutrients.kcal, 174);
+  approximate(pouch.nutrients.protein, 6.4);
+  approximate(carton.nutrients.kcal, 142);
+  approximate(carton.nutrients.protein, 6);
+  assert.equal(pouch.nutrients.addedSugar, 0);
+});
+
 test('recalculates homemade recipes by cooked yield and retains unmeasured nutrients as unknown', () => {
   const rice = catalog.get('rice-cooked');
   const oil = { nutrients: { kcal: 900, fat: 100 } };

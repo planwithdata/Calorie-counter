@@ -1,6 +1,6 @@
 const prefix = 'daily-katori-' + self.registration.scope + '-';
 const cacheName = prefix + '__DEPLOYMENT_REVISION__';
-const assets = ['./', './index.html', './style.css', './app.js', './core.js', './storage.js',
+const assets = ['./', './index.html', './style.css', './app.js', './core.js', './insights.js', './storage.js',
   './catalog.json', './icon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', event => event.waitUntil(cacheApp()));

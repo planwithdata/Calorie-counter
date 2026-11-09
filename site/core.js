@@ -4,9 +4,16 @@ export const nutrients = {
   saturatedFat: ['Saturated fat', 'g'], sodium: ['Sodium', 'mg'],
   calcium: ['Calcium', 'mg'], iron: ['Iron', 'mg'], potassium: ['Potassium', 'mg'],
   vitaminC: ['Vitamin C', 'mg'],
+  vitaminB12: ['Vitamin B12', 'µg'], folate: ['Folate (DFE)', 'µg'],
+  magnesium: ['Magnesium', 'mg'], zinc: ['Zinc', 'mg'], vitaminD: ['Vitamin D', 'µg'],
+  addedSugar: ['Added sugar', 'g'],
 };
 
 export const nutrientKeys = Object.keys(nutrients);
+export const targetKeys = ['kcal', 'protein', 'fiber', 'sodium', 'saturatedFat', 'addedSugar',
+  'calcium', 'iron', 'potassium', 'vitaminC', 'vitaminB12', 'folate', 'magnesium', 'zinc', 'vitaminD'];
+export const upperTargets = ['sodium', 'saturatedFat', 'addedSugar'];
+export const weightGoals = { maintain: 'Maintain weight', gain: 'Gain weight', lose: 'Lose weight' };
 export const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 export const diets = ['any', 'vegetarian', 'vegan'];
 export const backupVersion = 1;
@@ -199,6 +206,10 @@ export function validateBackup(backup) {
     || !Object.entries(state.completed).every(([day, value]) => isoDate(day) && value === true)
     || !diets.includes(state.settings.diet)
     || !['kcal', 'protein'].every(key => state.settings[key] === null || positive(state.settings[key]))
+    || (state.settings.goal !== undefined && !Object.hasOwn(weightGoals, state.settings.goal))
+    || (state.settings.showReferences !== undefined && typeof state.settings.showReferences !== 'boolean')
+    || (state.settings.nutrientTargets !== undefined && (!record(state.settings.nutrientTargets)
+      || !Object.entries(state.settings.nutrientTargets).every(([key, value]) => targetKeys.slice(2).includes(key) && positive(value))))
     || !(state.settings.lastBackup === null || timestamp(state.settings.lastBackup))) {
     throw new Error('This backup has invalid diary data. Your current data has been kept.');
   }
